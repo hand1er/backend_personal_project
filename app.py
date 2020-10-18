@@ -27,7 +27,7 @@ def register():
             return "비밀번호를 확인해주세요"
         else:
             #** USER API PATH **#
-            url = 'http://0.0.0.0:5000/user/users'
+            url = 'http://0.0.0.0:5000/users'
             datas = {'userid':userid,'password':password,'username':username}
             res = requests.post(url, data=datas)
             return res.text

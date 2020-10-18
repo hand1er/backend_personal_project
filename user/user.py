@@ -4,9 +4,10 @@ import werkzeug
 werkzeug.cached_property = werkzeug.utils.cached_property
 
 from flask import Flask
-from flask_restplus import Resource, Api, reqparse
+from flask_restplus import Resource, Api, reqparse, fields
 from pymongo import MongoClient
 import hashlib
+from bson.json_util import dumps, loads
 
 app = Flask(__name__)
 api = Api(app, version='1.0', title='User API', description='사용자 관리 REST API 문서')
@@ -16,22 +17,27 @@ app.config.SWAGGER_UI_DOC_EXPANSION = 'list'
 #--------------------------------------------
 # 사용자 관리를 위한 API 정의
 #--------------------------------------------
+
+model_users = api.model('users',{
+    'userid': fields.String(required=True, description='사용자 ID', help='사용자 ID는 필수'),
+    'username' : fields.String(required=True, description='사용자 이름', help='사용자 이름은 필수'),
+    'password' : fields.String(required=True, description='비밀번호', help='비밀번호는 필수'),
+})
+
+"""
 user_parser = ns.parser()
 user_parser.add_argument('userid', required=True, help='사용자 ID')
 user_parser.add_argument('password', required=True, help='패스워드')
 user_parser.add_argument('username', required=True, help='사용자 이름')
-
-@ns.route('/users')
-@ns.expect(user_parser)
+"""
+@ns.route('/<userid>')
+#@ns.expect(user_parser)
 class User(Resource):
-    def get(self):
-        """
-            List User
-        """
-
-    def post(self):
+    @ns.expect(model_users)
+    def post(self,userid):
         """
             Create User
+            POST /users/<userid>
         """
         args = user_parser.parse_args()
 
@@ -45,6 +51,55 @@ class User(Resource):
 
         result = {'result': message, 'userid':userid, 'username':username}
         return result, 200
+
+@ns.route('/')
+class UserList(Resource):
+    def get(self):
+        """
+            Get User Lists
+            GET /users/
+        """
+        try:
+            message = loads(get_user_list_mongo())
+        except KeyError:
+            return {'result':'ERROR_PARAMETER'},500
+        
+        return message,200
+    @ns.expect(model_users)
+    def post(self):
+        """
+            Create User
+            POST /users/
+        """
+        args = user_parser.parse_args()
+
+        try:
+            userid = args['userid']
+            password = args['password']
+            username = args['username']
+            message = create_user_mongo(userid,username,password)
+        except KeyError:
+            return {'result': 'ERROR_PARAMETER'}, 500
+
+        result = {'result': message, 'userid':userid, 'username':username}
+        return result, 200
+
+
+def get_user_list_mongo():
+    #** MONGO_DB_PATH **#
+    client = MongoClient('mongodb://localhost:27017/')
+    db = client.user
+    collection = db.userlist
+
+    user_list = collection.find({},{"_id":0,"userid":1,"username":1})
+    json_data=dumps(user_list, ensure_ascii=False)
+    if user_list:
+        client.close()
+        return json_data
+    else:
+        client.close()
+        return {'result': "등록된 사용자가 없습니다."}
+
     
 def create_user_mongo(userid,username,password):
     hasher = hashlib.sha512()
