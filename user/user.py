@@ -3,7 +3,7 @@
 import werkzeug
 werkzeug.cached_property = werkzeug.utils.cached_property
 
-from flask import Flask
+from flask import Flask, request
 from flask_restplus import Resource, Api, reqparse, fields
 from pymongo import MongoClient
 import hashlib
@@ -40,6 +40,14 @@ class User(Resource):
             Get a user
             GET /users/<userid>
         """
+        try:
+            message = get_user__mongo(userid)
+        except KeyError:
+            return {'result':'ERROR_PARAMETER'},400
+
+        if not message:
+            return {'result':'해당 ID로 등록된 사용자가 없습니다.'},400
+        return message,200
 
     @ns.expect(model_users)
     def post(self,userid):
@@ -47,6 +55,19 @@ class User(Resource):
             Edit a user
             POST /users/<userid>
         """
+        try:
+            body = request.get_json()
+            userid = userid
+            password = body['password']
+            username = body['username']
+            message = edit_user_mongo(userid,username,password)
+        except KeyError:
+            return {'result': 'ERROR_PARAMETER'}, 500
+
+        if message:
+            return {'result' : '정상적으로 변경되었습니다.', 'userid':userid, 'username':username},200
+        else:
+            return {'result' : 'ID나 비밀번호를 다시 확인해주세요.'},400
 
 @ns.route('/')
 class UserList(Resource):
@@ -56,29 +77,40 @@ class UserList(Resource):
             GET /users/
         """
         try:
-            message = loads(get_user_list_mongo())
+            message = get_user_list_mongo()
         except KeyError:
             return {'result':'ERROR_PARAMETER'},500
         
         return message,200
+
     @ns.expect(model_users)
     def post(self):
         """
             Create a User
             POST /users/
         """
-        args = user_parser.parse_args()
-
         try:
-            userid = args['userid']
-            password = args['password']
-            username = args['username']
+            body = request.get_json()
+            userid = body['userid']
+            password = body['password']
+            username = body['username']
             message = create_user_mongo(userid,username,password)
         except KeyError:
             return {'result': 'ERROR_PARAMETER'}, 500
 
         result = {'result': message, 'userid':userid, 'username':username}
         return result, 200
+
+def get_user__mongo(userid):
+    #** MONGO_DB_PATH **#
+    client = MongoClient('mongodb://localhost:27017/')
+    db = client.user
+    collection = db.userlist
+
+    user_info = collection.find({"userid":userid},{"_id":0,"userid":1,"username":1})
+    json_data=loads(dumps(user_info, ensure_ascii=False))
+    client.close()
+    return json_data
 
 
 def get_user_list_mongo():
@@ -88,8 +120,8 @@ def get_user_list_mongo():
     collection = db.userlist
 
     user_list = collection.find({},{"_id":0,"userid":1,"username":1})
-    json_data=dumps(user_list, ensure_ascii=False)
-    if user_list:
+    json_data=loads(dumps(user_list, ensure_ascii=False))
+    if json_data:
         client.close()
         return json_data
     else:
@@ -112,6 +144,23 @@ def create_user_mongo(userid,username,password):
     collection.insert({'userid':userid,'password':hasher.hexdigest(),'username':username})
     client.close()
     return "회원가입 완료"
+
+def edit_user_mongo(userid,username,password):
+    hasher = hashlib.sha512()
+    hasher.update(password.encode('utf-8'))
+    #** MONGO_DB_PATH **#
+    client = MongoClient('mongodb://localhost:27017/')
+    db = client.user
+    collection = db.userlist
+    #user_info = collection.find({"userid":userid,"password":hasher.hexdigest()})
+    user_info = collection.update({"userid":userid,"password":hasher.hexdigest()},{"$set":{"username":username}})
+    json_data=loads(dumps(user_info, ensure_ascii=False))
+    client.close()
+    
+    if json_data['nModified'] :
+        return True
+    else:
+        return False
 
 
 if __name__ == '__main__':
