@@ -43,7 +43,7 @@ class UserResource(Resource):
             Get a user resource.
             GET/HEAD /v3/users/{user_id}
         """
-        #** MONGO_DB_PATH **#
+        #** MONGO_DB_HOST **#
         client = MongoClient('mongodb://localhost:27017/')
         db = client.user
         collection = db.userlist
