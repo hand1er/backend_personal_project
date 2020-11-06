@@ -3,7 +3,7 @@
 import werkzeug
 werkzeug.cached_property = werkzeug.utils.cached_property
 
-from flask import Flask, request, jsonify
+from flask import Flask, request
 from flask_restplus import Resource, Api, reqparse, fields
 from pymongo import MongoClient
 import hashlib
@@ -33,6 +33,8 @@ class AuthResource(Resource):
     def post(self):
         """
             Authenticate user.
+
+            HEAD/POST /auth
         """
         try:
             body = request.get_json()
@@ -45,11 +47,10 @@ class AuthResource(Resource):
         if auth_result:
             payload = {
                 "user_id" : user_id,
-                "exp" : datetime.utcnow() + timedelta(seconds = 60*60*40)
+                "exp" : datetime.utcnow() + timedelta(seconds = 60)
             }
             token = jwt.encode(payload, 'abc', algorithm="HS256")
-            #return {"access_token":token.decode('UTF-8')}
-            return jsonify({"access_token":token.decode('UTF-8')})
+            return {"access_token":token.decode('UTF-8')}, 200
         else:
             return {'result': 'Authentication Failed'},401
 
@@ -65,7 +66,28 @@ class AuthResource(Resource):
         client.close()
 
         return json_data
-        
+
+@ns.route('/tokens')
+class AuthResource(Resource):
+
+    def get(self):
+        """
+            Validate a token.
+
+            HEAD/GET /auth/tokens
+        """
+        try:
+            token_id = request.headers.get('X-Subject-Token')
+        except KeyError:
+            return {'result': 'ERROR_PARAMETER'},400
+
+        try:
+            token = jwt.decode(token_id, 'abc', algorithm='HS256')
+
+        except jwt.DecodeError:
+            return {'result': 'Invalid'},401
+        except jwt.ExpiredSignatureError:
+            return {'result': 'Expired_token'},400        
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

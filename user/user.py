@@ -104,7 +104,7 @@ class UserResource(Resource):
         if message:
             return {'result' : '정상적으로 변경되었습니다.', 'user_id':user_id, 'name':name},200
         else:
-            return {'result' : 'ID나 비밀번호를 다시 확인해주세요.'},400
+            return {'result' : 'ID나 비밀번호를 다시 확인해주세요.'},401
 
     def create_user_mongo(self, user_id, name, password):
         hasher = hashlib.sha512()
